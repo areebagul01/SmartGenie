@@ -1,0 +1,110 @@
+<div class="auth-container">
+  <div class="auth-card">
+    <div class="text-center mb-4">
+      <h2 class="fw-bold text-primary">Join SmartGenie</h2>
+      <p class="text-muted">Create your account to get started</p>
+    </div>
+
+    <!-- Success Message -->
+    <div *ngIf="successMessage" class="alert alert-success alert-dismissible fade show" role="alert">
+      {{ successMessage }}
+    </div>
+
+    <!-- Error Message -->
+    <div *ngIf="errorMessage" class="alert alert-danger alert-dismissible fade show" role="alert">
+      {{ errorMessage }}
+    </div>
+
+    <form [formGroup]="signupForm" (ngSubmit)="onSubmit()">
+      <!-- Name -->
+      <div class="mb-3">
+        <label for="name" class="form-label">Full Name</label>
+        <input 
+          type="text" 
+          class="form-control" 
+          id="name"
+          formControlName="name"
+          placeholder="Enter your full name">
+        <div *ngIf="formControls['name'].invalid && formControls['name'].touched" class="text-danger">
+          <small *ngIf="formControls['name'].errors?.['required']">Name is required</small>
+          <small *ngIf="formControls['name'].errors?.['minlength']">Name must be at least 3 characters</small>
+        </div>
+      </div>
+
+      <!-- Email -->
+      <div class="mb-3">
+        <label for="email" class="form-label">Email Address</label>
+        <input 
+          type="email" 
+          class="form-control" 
+          id="email"
+          formControlName="email"
+          placeholder="Enter your email">
+        <div *ngIf="formControls['email'].invalid && formControls['email'].touched" class="text-danger">
+          <small *ngIf="formControls['email'].errors?.['required']">Email is required</small>
+          <small *ngIf="formControls['email'].errors?.['email']">Please enter a valid email</small>
+        </div>
+      </div>
+
+      <!-- Password -->
+      <div class="mb-3">
+        <label for="password" class="form-label">Password</label>
+        <input 
+          type="password" 
+          class="form-control" 
+          id="password"
+          formControlName="password"
+          placeholder="Enter your password">
+        <div *ngIf="formControls['password'].invalid && formControls['password'].touched" class="text-danger">
+          <small *ngIf="formControls['password'].errors?.['required']">Password is required</small>
+          <small *ngIf="formControls['password'].errors?.['minlength']">Password must be at least 6 characters</small>
+        </div>
+      </div>
+
+      <!-- Phone -->
+      <div class="mb-3">
+        <label for="phone" class="form-label">Phone Number</label>
+        <input 
+          type="tel" 
+          class="form-control" 
+          id="phone"
+          formControlName="phone"
+          placeholder="Enter your phone number">
+        <div *ngIf="formControls['phone'].invalid && formControls['phone'].touched" class="text-danger">
+          <small *ngIf="formControls['phone'].errors?.['required']">Phone number is required</small>
+          <small *ngIf="formControls['phone'].errors?.['pattern']">Please enter a valid phone number</small>
+        </div>
+      </div>
+
+      <!-- User Type -->
+      <div class="mb-4">
+        <label class="form-label">I am a:</label>
+        <div>
+          <div class="form-check form-check-inline">
+            <input class="form-check-input" type="radio" formControlName="userType" id="customer" value="customer" checked>
+            <label class="form-check-label" for="customer">Customer</label>
+          </div>
+          <div class="form-check form-check-inline">
+            <input class="form-check-input" type="radio" formControlName="userType" id="restaurantOwner" value="restaurant_owner">
+            <label class="form-check-label" for="restaurantOwner">Restaurant Owner</label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Submit Button -->
+      <button 
+        type="submit" 
+        class="btn btn-primary w-100 py-2"
+        [disabled]="signupForm.invalid || isLoading">
+        <span *ngIf="isLoading" class="spinner-border spinner-border-sm me-2"></span>
+        {{ isLoading ? 'Creating Account...' : 'Create Account' }}
+      </button>
+    </form>
+
+    <div class="text-center mt-3">
+      <p class="mb-0">Already have an account? 
+        <a routerLink="/login" class="text-decoration-none">Sign In</a>
+      </p>
+    </div>
+  </div>
+</div>
