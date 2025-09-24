@@ -10,10 +10,10 @@ const router = express.Router();
 // @access  Public
 router.post('/signup', async (req, res) => {
     try {
-        const { name, email, password, phone, userType } = req.body;
+        const { name, email, password } = req.body;
 
         // Validation
-        if (!name || !email || !password || !phone) {
+        if (!name || !email || !password) {
             return res.status(400).json({ 
                 success: false, 
                 message: 'All fields are required' 
@@ -37,9 +37,7 @@ router.post('/signup', async (req, res) => {
         const user = new User({
             name,
             email,
-            password: hashedPassword,
-            phone,
-            userType: userType || 'customer'
+            password: hashedPassword
         });
 
         await user.save();
@@ -58,9 +56,7 @@ router.post('/signup', async (req, res) => {
                 user: {
                     id: user._id,
                     name: user.name,
-                    email: user.email,
-                    phone: user.phone,
-                    userType: user.userType
+                    email: user.email
                 },
                 token
             }
@@ -122,9 +118,7 @@ router.post('/login', async (req, res) => {
                 user: {
                     id: user._id,
                     name: user.name,
-                    email: user.email,
-                    phone: user.phone,
-                    userType: user.userType
+                    email: user.email
                 },
                 token
             }

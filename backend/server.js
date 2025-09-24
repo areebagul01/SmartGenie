@@ -24,11 +24,6 @@ app.get('/', (req, res) => {
     res.json({ message: '🚀 SmartGenie Backend is Running!' });
 });
 
-// Test route for auth
-app.get('/api/test', (req, res) => {
-    res.json({ message: 'Auth API is working!' });
-});
-
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
     console.log(`🎯 Server running on port ${PORT}`);
