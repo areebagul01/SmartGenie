@@ -4,6 +4,7 @@ const cors = require('cors');
 require('dotenv').config();
 
 const authRoutes = require('./routes/auth');
+const userRoutes = require('./routes/users');
 
 const app = express();
 
@@ -13,8 +14,9 @@ app.use(express.json());
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
 
-// MongoDB Connection (Fixed)
+// MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI)
 .then(() => console.log('✅ MongoDB Connected Successfully'))
 .catch(err => console.log('❌ MongoDB Connection Error:', err));
@@ -22,6 +24,14 @@ mongoose.connect(process.env.MONGODB_URI)
 // Basic route
 app.get('/', (req, res) => {
     res.json({ message: '🚀 SmartGenie Backend is Running!' });
+});
+
+// Handle undefined routes
+app.all('*', (req, res) => {
+    res.status(404).json({
+        success: false,
+        message: `Route ${req.originalUrl} not found`
+    });
 });
 
 const PORT = process.env.PORT || 5000;
