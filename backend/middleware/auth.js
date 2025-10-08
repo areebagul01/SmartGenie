@@ -20,7 +20,22 @@ exports.protect = async (req, res, next) => {
         try {
             // Verify token
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
-            req.user = decoded;
+            
+            // Verify user still exists in database
+            const user = await User.findById(decoded.userId);
+            if (!user) {
+                return res.status(401).json({
+                    success: false,
+                    message: 'User no longer exists'
+                });
+            }
+
+            req.user = {
+                userId: user._id,
+                email: user.email,
+                role: user.role
+            };
+            
             next();
         } catch (error) {
             return res.status(401).json({

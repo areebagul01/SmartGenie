@@ -32,7 +32,8 @@ exports.signup = async (req, res) => {
         const user = await User.create({
             name,
             email,
-            password: hashedPassword
+            password: hashedPassword,
+            role: 'user'
         });
 
         // Generate JWT token
@@ -49,7 +50,8 @@ exports.signup = async (req, res) => {
                 user: {
                     id: user._id,
                     name: user.name,
-                    email: user.email
+                    email: user.email,
+                    role: user.role
                 },
                 token
             }
@@ -109,7 +111,8 @@ exports.login = async (req, res) => {
                 user: {
                     id: user._id,
                     name: user.name,
-                    email: user.email
+                    email: user.email,
+                    role: user.role
                 },
                 token
             }
