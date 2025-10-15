@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Admin = require('../models/Admin');
 
 // Protect routes - verify JWT
 exports.protect = async (req, res, next) => {
@@ -21,8 +22,14 @@ exports.protect = async (req, res, next) => {
             // Verify token
             const decoded = jwt.verify(token, process.env.JWT_SECRET);
             
-            // Verify user still exists in database
-            const user = await User.findById(decoded.userId);
+            // Check if user exists in Admin or User collection based on role
+            let user;
+            if (decoded.role === 'admin') {
+                user = await Admin.findById(decoded.userId);
+            } else {
+                user = await User.findById(decoded.userId);
+            }
+            
             if (!user) {
                 return res.status(401).json({
                     success: false,
@@ -31,6 +38,7 @@ exports.protect = async (req, res, next) => {
             }
 
             req.user = {
+                id: user._id,
                 userId: user._id,
                 email: user.email,
                 role: user.role

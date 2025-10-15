@@ -2,7 +2,10 @@ const express = require('express');
 const {
     createAdmin,
     getAllAdmins,
-    getDashboardStats
+    getDashboardStats,
+    getCurrentAdminProfile,
+    updateProfile,
+    deleteAdmin
 } = require('../controllers/adminController');
 const { protect } = require('../middleware/auth');
 
@@ -15,5 +18,8 @@ router.use(protect);
 router.post('/create', createAdmin);
 router.get('/admins', getAllAdmins);
 router.get('/dashboard/stats', getDashboardStats);
+router.get('/profile', getCurrentAdminProfile);
+router.put('/profile', updateProfile);
+router.delete('/delete/:id', deleteAdmin);
 
 module.exports = router;
