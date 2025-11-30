@@ -6,17 +6,27 @@ require('dotenv').config();
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const adminRoutes = require('./routes/admin');
+const restaurantRoutes = require('./routes/restaurants');
 
 const app = express();
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use(express.urlencoded({ extended: true })); // For form data
 
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/restaurants', restaurantRoutes);
+
+// Debug: Log all registered routes
+console.log('✅ Routes registered:');
+console.log('  /api/auth');
+console.log('  /api/users');
+console.log('  /api/admin');
+console.log('  /api/restaurants');
 
 // MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI)
@@ -30,6 +40,7 @@ app.get('/', (req, res) => {
 
 // Handle undefined routes
 app.all('*', (req, res) => {
+    console.log('❌ Route not found:', req.method, req.originalUrl);
     res.status(404).json({
         success: false,
         message: `Route ${req.originalUrl} not found`

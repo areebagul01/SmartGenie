@@ -84,46 +84,63 @@ exports.login = async (req, res) => {
 
         let matchedUser = null;
         
-        if (loginAs === 'admin') {
-            // Admin panel login - check Admin collection
-            const admin = await Admin.findOne({ email }).select('+password');
+        // Normalize email (trim and lowercase)
+        const normalizedEmail = email.trim().toLowerCase();
+        
+        console.log('🔍 Login Attempt:', { email: normalizedEmail, loginAs });
+        
+        // Check Admin collection first (if loginAs is 'admin' or not specified)
+        if (loginAs === 'admin' || !loginAs) {
+            const admin = await Admin.findOne({ email: normalizedEmail }).select('+password');
             
-            if (!admin) {
+            console.log('👤 Admin found:', admin ? 'Yes' : 'No');
+            if (admin) {
+                console.log('🔐 Comparing password...');
+                const isPasswordValid = await bcrypt.compare(password, admin.password);
+                console.log('✅ Password valid:', isPasswordValid);
+                
+                if (isPasswordValid) {
+                    matchedUser = admin;
+                } else {
+                    console.log('❌ Password mismatch');
+                    return res.status(401).json({ 
+                        success: false, 
+                        message: 'Invalid email or password' 
+                    });
+                }
+            } else if (loginAs === 'admin') {
+                // If explicitly looking for admin but not found
+                console.log('❌ Admin not found in Admin collection');
                 return res.status(401).json({ 
                     success: false, 
                     message: 'Invalid email or password' 
                 });
             }
-
-            const isPasswordValid = await bcrypt.compare(password, admin.password);
-            if (!isPasswordValid) {
-                return res.status(401).json({ 
-                    success: false, 
-                    message: 'Invalid password' 
-                });
-            }
-
-            matchedUser = admin;
-        } else {
-            // User frontend login - check User collection
-            const user = await User.findOne({ email, role: 'user' }).select('+password');
+        }
+        
+        // If admin not found and loginAs is not 'admin', check User collection
+        if (!matchedUser && loginAs !== 'admin') {
+            const user = await User.findOne({ email: normalizedEmail, role: 'user' }).select('+password');
             
-            if (!user) {
-                return res.status(401).json({ 
-                    success: false, 
-                    message: 'Invalid email or password' 
-                });
+            if (user) {
+                const isPasswordValid = await bcrypt.compare(password, user.password);
+                if (isPasswordValid) {
+                    matchedUser = user;
+                } else {
+                    return res.status(401).json({ 
+                        success: false, 
+                        message: 'Invalid email or password' 
+                    });
+                }
             }
-
-            const isPasswordValid = await bcrypt.compare(password, user.password);
-            if (!isPasswordValid) {
-                return res.status(401).json({ 
-                    success: false, 
-                    message: 'Invalid password' 
-                });
-            }
-
-            matchedUser = user;
+        }
+        
+        // If still no matched user, return error
+        if (!matchedUser) {
+            return res.status(401).json({ 
+                success: false, 
+                message: 'Invalid email or password' 
+            });
         }
 
         // Generate JWT token
