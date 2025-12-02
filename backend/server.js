@@ -7,6 +7,8 @@ const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const adminRoutes = require('./routes/admin');
 const restaurantRoutes = require('./routes/restaurants');
+const reservationRoutes = require('./routes/reservations');
+const reviewRoutes = require('./routes/reviews');
 
 const app = express();
 
@@ -20,6 +22,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/restaurants', restaurantRoutes);
+app.use('/api/reservations', reservationRoutes);
+app.use('/api/reviews', reviewRoutes);
 
 // Debug: Log all registered routes
 console.log('✅ Routes registered:');
@@ -27,6 +31,8 @@ console.log('  /api/auth');
 console.log('  /api/users');
 console.log('  /api/admin');
 console.log('  /api/restaurants');
+console.log('  /api/reservations');
+console.log('  /api/reviews');
 
 // MongoDB Connection
 mongoose.connect(process.env.MONGODB_URI)

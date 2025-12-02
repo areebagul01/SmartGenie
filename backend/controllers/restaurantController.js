@@ -633,3 +633,316 @@ exports.loginRestaurant = async (req, res) => {
     }
 };
 
+// @desc    Get all approved restaurants (PUBLIC)
+// @route   GET /api/restaurants
+// @access  Public
+exports.getAllRestaurants = async (req, res) => {
+    try {
+        const { 
+            page = 1, 
+            limit = 10, 
+            city, 
+            cuisineType, 
+            search,
+            sort = 'newest' 
+        } = req.query;
+
+        // Build query - only approved restaurants
+        const query = { status: 'APPROVED' };
+
+        // Filter by city
+        if (city) {
+            query['restaurantAddress.city'] = new RegExp(city, 'i');
+        }
+
+        // Filter by cuisine type
+        if (cuisineType) {
+            query.cuisineType = new RegExp(cuisineType, 'i');
+        }
+
+        // Search in restaurant name, description, or cuisine
+        if (search) {
+            query.$or = [
+                { restaurantName: new RegExp(search, 'i') },
+                { description: new RegExp(search, 'i') },
+                { cuisineType: new RegExp(search, 'i') }
+            ];
+        }
+
+        // Build sort object
+        let sortObject = { createdAt: -1 }; // Default: newest first
+        if (sort === 'oldest') {
+            sortObject = { createdAt: 1 };
+        } else if (sort === 'name') {
+            sortObject = { restaurantName: 1 };
+        } else if (sort === 'rating') {
+            // Can be enhanced with average rating from reviews
+            sortObject = { createdAt: -1 };
+        }
+
+        // Calculate pagination
+        const pageNum = parseInt(page);
+        const limitNum = parseInt(limit);
+        const skip = (pageNum - 1) * limitNum;
+
+        // Get restaurants with pagination
+        const restaurants = await Restaurant.find(query)
+            .select('-ownerId -ownerEmail -ownerPhone -rejectionReason -approvedBy -rejectedBy -approvedAt -rejectedAt')
+            .sort(sortObject)
+            .skip(skip)
+            .limit(limitNum)
+            .lean();
+
+        // Get total count for pagination
+        const totalRestaurants = await Restaurant.countDocuments(query);
+
+        // Format response
+        const formattedRestaurants = restaurants.map(restaurant => ({
+            _id: restaurant._id,
+            restaurantName: restaurant.restaurantName,
+            restaurantAddress: restaurant.restaurantAddress,
+            cuisineType: restaurant.cuisineType,
+            description: restaurant.description,
+            openingHours: restaurant.openingHours,
+            seatingCapacity: restaurant.seatingCapacity,
+            totalSeatCapacity: restaurant.totalSeatCapacity,
+            cardProfile: restaurant.cardProfile || {},
+            createdAt: restaurant.createdAt,
+            updatedAt: restaurant.updatedAt
+        }));
+
+        res.json({
+            success: true,
+            data: {
+                restaurants: formattedRestaurants,
+                pagination: {
+                    currentPage: pageNum,
+                    totalPages: Math.ceil(totalRestaurants / limitNum),
+                    totalRestaurants,
+                    limit: limitNum
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error('Get All Restaurants Error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch restaurants',
+            error: error.message
+        });
+    }
+};
+
+// @desc    Get restaurant card profile
+// @route   GET /api/restaurants/:restaurantId/card-profile
+// @access  Public
+exports.getRestaurantCardProfile = async (req, res) => {
+    try {
+        const { restaurantId } = req.params;
+
+        const restaurant = await Restaurant.findById(restaurantId)
+            .select('restaurantName cardProfile')
+            .lean();
+
+        if (!restaurant) {
+            return res.status(404).json({
+                success: false,
+                message: 'Restaurant not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            data: {
+                restaurantId: restaurant._id,
+                restaurantName: restaurant.restaurantName,
+                cardProfile: restaurant.cardProfile || {}
+            }
+        });
+
+    } catch (error) {
+        console.error('Get Restaurant Card Profile Error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to fetch restaurant card profile',
+            error: error.message
+        });
+    }
+};
+
+// @desc    Update restaurant card profile
+// @route   PUT /api/restaurants/:restaurantId/card-profile
+// @access  Private (Owner only)
+exports.updateRestaurantCardProfile = async (req, res) => {
+    try {
+        const { restaurantId } = req.params;
+        const {
+            coverImage,
+            logo,
+            featuredImages,
+            highlights,
+            tags,
+            socialLinks
+        } = req.body;
+
+        // Find restaurant
+        const restaurant = await Restaurant.findById(restaurantId);
+
+        if (!restaurant) {
+            return res.status(404).json({
+                success: false,
+                message: 'Restaurant not found'
+            });
+        }
+
+        // Check if logged-in user is the owner
+        if (restaurant.ownerId.toString() !== req.user.id.toString()) {
+            return res.status(403).json({
+                success: false,
+                message: 'Access denied. Only the restaurant owner can update the card profile.'
+            });
+        }
+
+        // Build update object
+        const updateData = {};
+
+        if (coverImage !== undefined) {
+            updateData['cardProfile.coverImage'] = coverImage ? coverImage.trim() : '';
+        }
+
+        if (logo !== undefined) {
+            updateData['cardProfile.logo'] = logo ? logo.trim() : '';
+        }
+
+        if (featuredImages !== undefined) {
+            if (Array.isArray(featuredImages)) {
+                updateData['cardProfile.featuredImages'] = featuredImages
+                    .filter(img => img && img.trim())
+                    .map(img => img.trim());
+            } else {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Featured images must be an array'
+                });
+            }
+        }
+
+        if (highlights !== undefined) {
+            if (Array.isArray(highlights)) {
+                const trimmedHighlights = highlights
+                    .filter(h => h && h.trim())
+                    .map(h => h.trim());
+                
+                // Validate length
+                if (trimmedHighlights.some(h => h.length > 100)) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Each highlight cannot exceed 100 characters'
+                    });
+                }
+                
+                updateData['cardProfile.highlights'] = trimmedHighlights;
+            } else {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Highlights must be an array'
+                });
+            }
+        }
+
+        if (tags !== undefined) {
+            if (Array.isArray(tags)) {
+                const trimmedTags = tags
+                    .filter(t => t && t.trim())
+                    .map(t => t.trim());
+                
+                // Validate length
+                if (trimmedTags.some(t => t.length > 50)) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Each tag cannot exceed 50 characters'
+                    });
+                }
+                
+                updateData['cardProfile.tags'] = trimmedTags;
+            } else {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Tags must be an array'
+                });
+            }
+        }
+
+        if (socialLinks !== undefined) {
+            if (typeof socialLinks !== 'object' || Array.isArray(socialLinks)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Social links must be an object'
+                });
+            }
+
+            const socialLinksUpdate = {};
+            if (socialLinks.website !== undefined) {
+                socialLinksUpdate['cardProfile.socialLinks.website'] = socialLinks.website ? socialLinks.website.trim() : '';
+            }
+            if (socialLinks.facebook !== undefined) {
+                socialLinksUpdate['cardProfile.socialLinks.facebook'] = socialLinks.facebook ? socialLinks.facebook.trim() : '';
+            }
+            if (socialLinks.instagram !== undefined) {
+                socialLinksUpdate['cardProfile.socialLinks.instagram'] = socialLinks.instagram ? socialLinks.instagram.trim() : '';
+            }
+            if (socialLinks.twitter !== undefined) {
+                socialLinksUpdate['cardProfile.socialLinks.twitter'] = socialLinks.twitter ? socialLinks.twitter.trim() : '';
+            }
+
+            Object.assign(updateData, socialLinksUpdate);
+        }
+
+        // Check if there's any data to update
+        if (Object.keys(updateData).length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: 'No valid fields provided for update'
+            });
+        }
+
+        // Update restaurant
+        const updatedRestaurant = await Restaurant.findByIdAndUpdate(
+            restaurantId,
+            { $set: updateData },
+            { new: true, runValidators: true }
+        )
+        .select('restaurantName cardProfile');
+
+        res.json({
+            success: true,
+            message: 'Restaurant card profile updated successfully',
+            data: {
+                restaurantId: updatedRestaurant._id,
+                restaurantName: updatedRestaurant.restaurantName,
+                cardProfile: updatedRestaurant.cardProfile || {}
+            }
+        });
+
+    } catch (error) {
+        console.error('Update Restaurant Card Profile Error:', error);
+        
+        // Handle validation errors
+        if (error.name === 'ValidationError') {
+            const errors = Object.values(error.errors).map(err => err.message);
+            return res.status(400).json({
+                success: false,
+                message: 'Validation error',
+                errors: errors
+            });
+        }
+
+        res.status(500).json({
+            success: false,
+            message: 'Internal server error',
+            error: error.message
+        });
+    }
+};
+

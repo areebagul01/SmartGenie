@@ -5,7 +5,10 @@ const {
     getRestaurantStatus,
     getRestaurantStatusByEmail,
     getRestaurantDetails,
-    updateRestaurantProfile
+    updateRestaurantProfile,
+    getAllRestaurants,
+    getRestaurantCardProfile,
+    updateRestaurantCardProfile
 } = require('../controllers/restaurantController');
 const {
     getMenuItems,
@@ -17,7 +20,12 @@ const {
     upsertSeatSlot,
     updateSeatSlot,
     deleteSeatSlot,
-    updateTotalCapacity
+    updateTotalCapacity,
+    getSpecialOffers,
+    createSpecialOffer,
+    updateSpecialOffer,
+    deleteSpecialOffer,
+    toggleSpecialOfferStatus
 } = require('../controllers/menuController');
 const { protect } = require('../middleware/auth');
 
@@ -54,7 +62,20 @@ router.post('/login', loginRestaurant);
 // Get restaurant status by email (public for checking status)
 router.get('/status/email/:email', getRestaurantStatusByEmail);
 
-// Get restaurant details (public)
+// Get all approved restaurants (PUBLIC)
+router.get('/', getAllRestaurants);
+
+// Public routes - More specific routes must come before generic :restaurantId route
+// Get restaurant card profile (public)
+router.get('/:restaurantId/card-profile', getRestaurantCardProfile);
+
+// Get restaurant menu (public)
+router.get('/:restaurantId/menu', getMenuItems);
+
+// Get restaurant seat slots (public)
+router.get('/:restaurantId/seat-slots', getSeatSlots);
+
+// Get restaurant details (public) - Must be last to avoid route conflicts
 router.get('/:restaurantId', getRestaurantDetails);
 
 // Protected routes
@@ -63,22 +84,30 @@ router.use(protect);
 // Get restaurant status by owner ID
 router.get('/status/:ownerId', getRestaurantStatus);
 
-// Menu management routes
-router.get('/:restaurantId/menu', getMenuItems);
+// Menu management routes (protected - owner only)
 router.post('/:restaurantId/menu', createMenuItem);
 router.put('/:restaurantId/menu/:menuItemId', updateMenuItem);
 router.patch('/:restaurantId/menu/:menuItemId/status', toggleMenuItemStatus);
 router.delete('/:restaurantId/menu/:menuItemId', deleteMenuItem);
 
-// Seat availability routes
-router.get('/:restaurantId/seat-slots', getSeatSlots);
+// Seat availability routes (protected - owner only)
 router.post('/:restaurantId/seat-slots', upsertSeatSlot);
 router.put('/:restaurantId/seat-slots/:slotId', updateSeatSlot);
 router.delete('/:restaurantId/seat-slots/:slotId', deleteSeatSlot);
 router.patch('/:restaurantId/seat-slots/capacity', updateTotalCapacity);
 
+// Special offers routes
+router.get('/:restaurantId/menu/special-offers', getSpecialOffers);
+router.post('/:restaurantId/menu/special-offers', createSpecialOffer);
+router.put('/:restaurantId/menu/special-offers/:offerId', updateSpecialOffer);
+router.delete('/:restaurantId/menu/special-offers/:offerId', deleteSpecialOffer);
+router.put('/:restaurantId/menu/special-offers/:offerId/status', toggleSpecialOfferStatus);
+
 // Update restaurant profile (owner only)
 router.put('/:restaurantId', updateRestaurantProfile);
+
+// Update restaurant card profile (owner only)
+router.put('/:restaurantId/card-profile', updateRestaurantCardProfile);
 
 module.exports = router;
 

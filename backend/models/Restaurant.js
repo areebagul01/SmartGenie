@@ -109,6 +109,49 @@ const restaurantSchema = new mongoose.Schema({
         min: [1, 'Total seat capacity must be at least 1'],
         max: [1000, 'Total seat capacity cannot exceed 1000'],
         default: 50
+    },
+    // Restaurant Card Profile
+    cardProfile: {
+        coverImage: {
+            type: String,
+            trim: true
+        },
+        logo: {
+            type: String,
+            trim: true
+        },
+        featuredImages: [{
+            type: String,
+            trim: true
+        }],
+        highlights: [{
+            type: String,
+            trim: true,
+            maxlength: [100, 'Highlight cannot exceed 100 characters']
+        }],
+        tags: [{
+            type: String,
+            trim: true,
+            maxlength: [50, 'Tag cannot exceed 50 characters']
+        }],
+        socialLinks: {
+            website: {
+                type: String,
+                trim: true
+            },
+            facebook: {
+                type: String,
+                trim: true
+            },
+            instagram: {
+                type: String,
+                trim: true
+            },
+            twitter: {
+                type: String,
+                trim: true
+            }
+        }
     }
 }, {
     timestamps: true

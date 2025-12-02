@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const Restaurant = require('../models/Restaurant');
 const MenuItem = require('../models/MenuItem');
 const SeatSlot = require('../models/SeatSlot');
+const SpecialOffer = require('../models/SpecialOffer');
 
 const ensureRestaurantOwnership = async (restaurantId, user) => {
     const restaurant = await Restaurant.findById(restaurantId);
@@ -36,12 +37,31 @@ const sanitizeMenuPayload = (payload = {}) => {
 };
 
 // Menu CRUD
+// @desc    Get menu items (PUBLIC)
+// @route   GET /api/restaurants/:restaurantId/menu
+// @access  Public
 exports.getMenuItems = async (req, res) => {
     try {
         const { restaurantId } = req.params;
-        await ensureRestaurantOwnership(restaurantId, req.user);
 
-        const items = await MenuItem.find({ restaurantId })
+        // Validate restaurant exists
+        const restaurant = await Restaurant.findById(restaurantId);
+        if (!restaurant) {
+            return res.status(404).json({
+                success: false,
+                message: 'Restaurant not found'
+            });
+        }
+
+        // Only show menu items for approved restaurants
+        if (restaurant.status !== 'APPROVED') {
+            return res.status(404).json({
+                success: false,
+                message: 'Restaurant not found'
+            });
+        }
+
+        const items = await MenuItem.find({ restaurantId, isActive: true })
             .sort({ category: 1, subCategory: 1, name: 1 })
             .lean();
 
@@ -53,10 +73,10 @@ exports.getMenuItems = async (req, res) => {
             }
         });
     } catch (error) {
-        res.status(error.statusCode || 500).json({
+        res.status(500).json({
             success: false,
-            message: error.statusCode ? error.message : 'Failed to fetch menu items',
-            error: error.statusCode ? undefined : error.message
+            message: 'Failed to fetch menu items',
+            error: error.message
         });
     }
 };
@@ -233,10 +253,29 @@ const validateSeatPayload = (payload = {}) => {
     return seatData;
 };
 
+// @desc    Get seat slots (PUBLIC)
+// @route   GET /api/restaurants/:restaurantId/seat-slots
+// @access  Public
 exports.getSeatSlots = async (req, res) => {
     try {
         const { restaurantId } = req.params;
-        const restaurant = await ensureRestaurantOwnership(restaurantId, req.user);
+
+        // Validate restaurant exists
+        const restaurant = await Restaurant.findById(restaurantId);
+        if (!restaurant) {
+            return res.status(404).json({
+                success: false,
+                message: 'Restaurant not found'
+            });
+        }
+
+        // Only show seat slots for approved restaurants
+        if (restaurant.status !== 'APPROVED') {
+            return res.status(404).json({
+                success: false,
+                message: 'Restaurant not found'
+            });
+        }
 
         const slots = await SeatSlot.find({ restaurantId })
             .sort({ type: 1, time: 1 })
@@ -246,14 +285,15 @@ exports.getSeatSlots = async (req, res) => {
             success: true,
             data: {
                 totalSeats: restaurant.totalSeatCapacity,
-                slots
+                slots,
+                seatSlots: slots  // Also include seatSlots for frontend compatibility
             }
         });
     } catch (error) {
-        res.status(error.statusCode || 500).json({
+        res.status(500).json({
             success: false,
-            message: error.statusCode ? error.message : 'Failed to fetch seat slots',
-            error: error.statusCode ? undefined : error.message
+            message: 'Failed to fetch seat slots',
+            error: error.message
         });
     }
 };
@@ -461,4 +501,243 @@ exports.updateTotalCapacity = async (req, res) => {
     }
 };
 
+// ============================================
+// SPECIAL OFFERS MANAGEMENT
+// ============================================
+
+const sanitizeOfferPayload = (payload = {}) => {
+    const sanitized = {};
+
+    if (payload.title !== undefined) sanitized.title = payload.title.trim();
+    if (payload.description !== undefined) sanitized.description = payload.description.trim();
+    if (payload.discountType !== undefined) sanitized.discountType = payload.discountType;
+    if (payload.discountValue !== undefined) sanitized.discountValue = Number(payload.discountValue);
+    if (payload.startDate !== undefined) sanitized.startDate = new Date(payload.startDate);
+    if (payload.endDate !== undefined) sanitized.endDate = new Date(payload.endDate);
+    if (payload.applicableMenuItems !== undefined) {
+        sanitized.applicableMenuItems = Array.isArray(payload.applicableMenuItems) 
+            ? payload.applicableMenuItems 
+            : [];
+    }
+    if (payload.isActive !== undefined) sanitized.isActive = !!payload.isActive;
+    if (payload.imageUrl !== undefined) sanitized.imageUrl = payload.imageUrl.trim();
+
+    return sanitized;
+};
+
+exports.getSpecialOffers = async (req, res) => {
+    try {
+        const { restaurantId } = req.params;
+        await ensureRestaurantOwnership(restaurantId, req.user);
+
+        const offers = await SpecialOffer.find({ restaurantId })
+            .populate('applicableMenuItems', 'name price')
+            .sort({ createdAt: -1 })
+            .lean();
+
+        res.json({
+            success: true,
+            data: { offers }
+        });
+    } catch (error) {
+        res.status(error.statusCode || 500).json({
+            success: false,
+            message: error.statusCode ? error.message : 'Failed to fetch special offers',
+            error: error.statusCode ? undefined : error.message
+        });
+    }
+};
+
+exports.createSpecialOffer = async (req, res) => {
+    try {
+        const { restaurantId } = req.params;
+        await ensureRestaurantOwnership(restaurantId, req.user);
+
+        const offerData = sanitizeOfferPayload(req.body);
+        offerData.restaurantId = restaurantId;
+
+        // Validation
+        if (!offerData.title || !offerData.description || !offerData.discountType || 
+            offerData.discountValue === undefined || !offerData.startDate || !offerData.endDate) {
+            return res.status(400).json({
+                success: false,
+                message: 'Title, description, discountType, discountValue, startDate, and endDate are required'
+            });
+        }
+
+        // Validate discount value based on type
+        if (offerData.discountType === 'percentage' && (offerData.discountValue < 0 || offerData.discountValue > 100)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Percentage discount must be between 0 and 100'
+            });
+        }
+
+        // Validate dates
+        if (offerData.endDate <= offerData.startDate) {
+            return res.status(400).json({
+                success: false,
+                message: 'End date must be after start date'
+            });
+        }
+
+        const offer = await SpecialOffer.create(offerData);
+
+        await offer.populate('applicableMenuItems', 'name price');
+
+        res.status(201).json({
+            success: true,
+            message: 'Special offer created successfully',
+            data: { offer }
+        });
+    } catch (error) {
+        const status = error.name === 'ValidationError' ? 400 : (error.statusCode || 500);
+        res.status(status).json({
+            success: false,
+            message: error.statusCode ? error.message : 'Failed to create special offer',
+            errors: error.name === 'ValidationError' ? Object.values(error.errors).map(err => err.message) : undefined,
+            error: !error.statusCode && error.name !== 'ValidationError' ? error.message : undefined
+        });
+    }
+};
+
+exports.updateSpecialOffer = async (req, res) => {
+    try {
+        const { restaurantId, offerId } = req.params;
+        
+        // Validate offerId is a valid MongoDB ObjectId
+        if (!mongoose.Types.ObjectId.isValid(offerId)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid offer ID format'
+            });
+        }
+
+        await ensureRestaurantOwnership(restaurantId, req.user);
+
+        const updateData = sanitizeOfferPayload(req.body);
+        
+        // Validate discount value if provided
+        if (updateData.discountType === 'percentage' && updateData.discountValue !== undefined) {
+            if (updateData.discountValue < 0 || updateData.discountValue > 100) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Percentage discount must be between 0 and 100'
+                });
+            }
+        }
+
+        // Validate dates if both provided
+        if (updateData.startDate && updateData.endDate && updateData.endDate <= updateData.startDate) {
+            return res.status(400).json({
+                success: false,
+                message: 'End date must be after start date'
+            });
+        }
+
+        const updatedOffer = await SpecialOffer.findOneAndUpdate(
+            { _id: offerId, restaurantId },
+            { $set: updateData },
+            { new: true, runValidators: true }
+        )
+        .populate('applicableMenuItems', 'name price');
+
+        if (!updatedOffer) {
+            return res.status(404).json({
+                success: false,
+                message: 'Special offer not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Special offer updated successfully',
+            data: { offer: updatedOffer }
+        });
+    } catch (error) {
+        const status = error.name === 'ValidationError' ? 400 : (error.statusCode || 500);
+        res.status(status).json({
+            success: false,
+            message: error.statusCode ? error.message : 'Failed to update special offer',
+            errors: error.name === 'ValidationError' ? Object.values(error.errors).map(err => err.message) : undefined,
+            error: !error.statusCode && error.name !== 'ValidationError' ? error.message : undefined
+        });
+    }
+};
+
+exports.deleteSpecialOffer = async (req, res) => {
+    try {
+        const { restaurantId, offerId } = req.params;
+        
+        // Validate offerId is a valid MongoDB ObjectId
+        if (!mongoose.Types.ObjectId.isValid(offerId)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid offer ID format'
+            });
+        }
+
+        await ensureRestaurantOwnership(restaurantId, req.user);
+
+        const deletedOffer = await SpecialOffer.findOneAndDelete({ _id: offerId, restaurantId });
+        if (!deletedOffer) {
+            return res.status(404).json({
+                success: false,
+                message: 'Special offer not found'
+            });
+        }
+
+        res.json({
+            success: true,
+            message: 'Special offer deleted successfully'
+        });
+    } catch (error) {
+        res.status(error.statusCode || 500).json({
+            success: false,
+            message: error.statusCode ? error.message : 'Failed to delete special offer',
+            error: error.statusCode ? undefined : error.message
+        });
+    }
+};
+
+exports.toggleSpecialOfferStatus = async (req, res) => {
+    try {
+        const { restaurantId, offerId } = req.params;
+        
+        // Validate offerId is a valid MongoDB ObjectId
+        if (!mongoose.Types.ObjectId.isValid(offerId)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid offer ID format'
+            });
+        }
+
+        await ensureRestaurantOwnership(restaurantId, req.user);
+
+        const offer = await SpecialOffer.findOne({ _id: offerId, restaurantId });
+        if (!offer) {
+            return res.status(404).json({
+                success: false,
+                message: 'Special offer not found'
+            });
+        }
+
+        offer.isActive = !offer.isActive;
+        await offer.save();
+
+        await offer.populate('applicableMenuItems', 'name price');
+
+        res.json({
+            success: true,
+            message: `Special offer ${offer.isActive ? 'activated' : 'deactivated'} successfully`,
+            data: { offer }
+        });
+    } catch (error) {
+        res.status(error.statusCode || 500).json({
+            success: false,
+            message: error.statusCode ? error.message : 'Failed to toggle offer status',
+            error: error.statusCode ? undefined : error.message
+        });
+    }
+};
 
