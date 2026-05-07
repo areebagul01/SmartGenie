@@ -4,7 +4,10 @@ const {
     getUserReservations,
     getReservationById,
     cancelReservation,
-    getAvailableTimeSlots
+    getAvailableTimeSlots,
+    getAllRestaurantBookings,
+    getRestaurantBookings,
+    updateReservationStatus
 } = require('../controllers/reservationController');
 const { protect } = require('../middleware/auth');
 
@@ -19,6 +22,13 @@ router.use(protect);
 // User reservation routes
 router.post('/', createReservation);
 router.get('/user', getUserReservations);
+
+// Restaurant booking management routes (must come before generic :id routes)
+router.get('/restaurant', getAllRestaurantBookings);
+router.get('/restaurant/:restaurantId', getRestaurantBookings);
+router.put('/:bookingId/status', updateReservationStatus);
+
+// Generic routes (must come last to avoid conflicts)
 router.get('/:id', getReservationById);
 router.put('/:id/cancel', cancelReservation);
 

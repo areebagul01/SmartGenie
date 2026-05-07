@@ -29,6 +29,14 @@ const specialOfferSchema = new mongoose.Schema({
         required: [true, 'Discount value is required'],
         min: [0, 'Discount value cannot be negative']
     },
+    price: {
+        type: Number,
+        min: [0, 'Price cannot be negative']
+    },
+    originalPrice: {
+        type: Number,
+        min: [0, 'Original price cannot be negative']
+    },
     startDate: {
         type: Date,
         required: [true, 'Start date is required']

@@ -508,19 +508,80 @@ exports.updateTotalCapacity = async (req, res) => {
 const sanitizeOfferPayload = (payload = {}) => {
     const sanitized = {};
 
-    if (payload.title !== undefined) sanitized.title = payload.title.trim();
-    if (payload.description !== undefined) sanitized.description = payload.description.trim();
-    if (payload.discountType !== undefined) sanitized.discountType = payload.discountType;
-    if (payload.discountValue !== undefined) sanitized.discountValue = Number(payload.discountValue);
-    if (payload.startDate !== undefined) sanitized.startDate = new Date(payload.startDate);
-    if (payload.endDate !== undefined) sanitized.endDate = new Date(payload.endDate);
+    // Handle title (frontend may send 'name')
+    if (payload.title !== undefined) {
+        sanitized.title = String(payload.title).trim();
+    } else if (payload.name !== undefined) {
+        sanitized.title = String(payload.name).trim();
+    }
+
+    // Handle description
+    if (payload.description !== undefined) sanitized.description = String(payload.description).trim();
+
+    // Handle discountType and discountValue
+    // Frontend may send: discount (percentage), or price/originalPrice (fixed discount)
+    if (payload.discountType !== undefined) {
+        sanitized.discountType = payload.discountType;
+    } else {
+        // Auto-detect discount type from frontend payload
+        if (payload.discount !== undefined) {
+            // Frontend sends discount as percentage
+            sanitized.discountType = 'percentage';
+            sanitized.discountValue = Number(payload.discount);
+        } else if (payload.originalPrice !== undefined && payload.price !== undefined) {
+            // Frontend sends originalPrice and price, calculate discount
+            const originalPrice = Number(payload.originalPrice);
+            const price = Number(payload.price);
+            if (originalPrice > 0 && price < originalPrice) {
+                sanitized.discountType = 'fixed';
+                sanitized.discountValue = originalPrice - price;
+            }
+        }
+    }
+
+    // Handle discountValue if not set above
+    if (payload.discountValue !== undefined && sanitized.discountValue === undefined) {
+        sanitized.discountValue = Number(payload.discountValue);
+    }
+
+    // Handle price and originalPrice (store directly from frontend)
+    if (payload.price !== undefined) {
+        sanitized.price = Number(payload.price);
+    }
+    if (payload.originalPrice !== undefined) {
+        sanitized.originalPrice = Number(payload.originalPrice);
+    }
+
+    // Handle dates (set defaults if missing)
+    if (payload.startDate !== undefined) {
+        sanitized.startDate = new Date(payload.startDate);
+    } else {
+        // Default: start from today
+        sanitized.startDate = new Date();
+        sanitized.startDate.setHours(0, 0, 0, 0);
+    }
+
+    if (payload.endDate !== undefined) {
+        sanitized.endDate = new Date(payload.endDate);
+    } else {
+        // Default: end after 30 days
+        sanitized.endDate = new Date();
+        sanitized.endDate.setDate(sanitized.endDate.getDate() + 30);
+        sanitized.endDate.setHours(23, 59, 59, 999);
+    }
+
+    // Handle applicableMenuItems
     if (payload.applicableMenuItems !== undefined) {
         sanitized.applicableMenuItems = Array.isArray(payload.applicableMenuItems) 
             ? payload.applicableMenuItems 
             : [];
     }
+
+    // Handle isActive
     if (payload.isActive !== undefined) sanitized.isActive = !!payload.isActive;
-    if (payload.imageUrl !== undefined) sanitized.imageUrl = payload.imageUrl.trim();
+
+    // Handle imageUrl
+    if (payload.imageUrl !== undefined) sanitized.imageUrl = String(payload.imageUrl).trim();
 
     return sanitized;
 };
@@ -528,16 +589,29 @@ const sanitizeOfferPayload = (payload = {}) => {
 exports.getSpecialOffers = async (req, res) => {
     try {
         const { restaurantId } = req.params;
-        await ensureRestaurantOwnership(restaurantId, req.user);
-
-        const offers = await SpecialOffer.find({ restaurantId })
+        
+        // Public endpoint - no authentication required for GET
+        // Only return active offers for public access
+        const query = { restaurantId, isActive: true };
+        
+        const offers = await SpecialOffer.find(query)
             .populate('applicableMenuItems', 'name price')
             .sort({ createdAt: -1 })
             .lean();
 
+        // Ensure price and originalPrice are included in response (even if null/undefined)
+        const offersWithPrice = offers.map(offer => ({
+            ...offer,
+            price: offer.price !== undefined ? offer.price : null,
+            originalPrice: offer.originalPrice !== undefined ? offer.originalPrice : null
+        }));
+
         res.json({
             success: true,
-            data: { offers }
+            data: { 
+                offers: offersWithPrice,
+                specialOffers: offersWithPrice  // Also include specialOffers for frontend compatibility
+            }
         });
     } catch (error) {
         res.status(error.statusCode || 500).json({
@@ -588,7 +662,10 @@ exports.createSpecialOffer = async (req, res) => {
         res.status(201).json({
             success: true,
             message: 'Special offer created successfully',
-            data: { offer }
+            data: { 
+                offer,
+                specialOffer: offer  // Also include specialOffer for frontend compatibility
+            }
         });
     } catch (error) {
         const status = error.name === 'ValidationError' ? 400 : (error.statusCode || 500);
@@ -652,7 +729,10 @@ exports.updateSpecialOffer = async (req, res) => {
         res.json({
             success: true,
             message: 'Special offer updated successfully',
-            data: { offer: updatedOffer }
+            data: { 
+                offer: updatedOffer,
+                specialOffer: updatedOffer  // Also include specialOffer for frontend compatibility
+            }
         });
     } catch (error) {
         const status = error.name === 'ValidationError' ? 400 : (error.statusCode || 500);
@@ -730,7 +810,10 @@ exports.toggleSpecialOfferStatus = async (req, res) => {
         res.json({
             success: true,
             message: `Special offer ${offer.isActive ? 'activated' : 'deactivated'} successfully`,
-            data: { offer }
+            data: { 
+                offer,
+                specialOffer: offer  // Also include specialOffer for frontend compatibility
+            }
         });
     } catch (error) {
         res.status(error.statusCode || 500).json({

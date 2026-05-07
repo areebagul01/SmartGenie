@@ -655,3 +655,77 @@ exports.getRestaurantById = async (req, res) => {
         });
     }
 };
+
+// @desc    Delete restaurant
+// @route   DELETE /api/admin/restaurant/delete/:id
+exports.deleteRestaurant = async (req, res) => {
+    try {
+        // Check if user is admin
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({
+                success: false,
+                message: 'Access denied. Admin role required.'
+            });
+        }
+
+        const { id } = req.params;
+
+        // Find restaurant
+        const restaurant = await Restaurant.findById(id);
+        
+        if (!restaurant) {
+            return res.status(404).json({
+                success: false,
+                message: 'Restaurant not found'
+            });
+        }
+
+        // Store restaurant name for response
+        const restaurantName = restaurant.restaurantName;
+
+        // Delete the restaurant
+        await Restaurant.findByIdAndDelete(id);
+
+        // Optional: Create notification for restaurant owner
+        try {
+            await Notification.create({
+                userId: restaurant.ownerId,
+                restaurantId: restaurant._id,
+                type: 'DELETION',
+                title: 'Restaurant Deleted',
+                message: `Your restaurant "${restaurantName}" has been deleted by the administrator.`
+            });
+        } catch (notifError) {
+            // Log notification error but don't fail the delete operation
+            console.error('Notification creation failed:', notifError);
+        }
+
+        res.json({
+            success: true,
+            message: 'Restaurant deleted successfully',
+            data: {
+                deletedRestaurant: {
+                    id: restaurant._id,
+                    name: restaurantName
+                }
+            }
+        });
+
+    } catch (error) {
+        console.error('Delete Restaurant Error:', error);
+        
+        // Handle invalid ObjectId format
+        if (error.name === 'CastError') {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid restaurant ID format'
+            });
+        }
+
+        res.status(500).json({
+            success: false,
+            message: 'Internal server error',
+            error: error.message
+        });
+    }
+};

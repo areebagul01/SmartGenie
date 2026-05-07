@@ -778,6 +778,11 @@ exports.updateRestaurantCardProfile = async (req, res) => {
     try {
         const { restaurantId } = req.params;
         const {
+            imageUrl,
+            discount,
+            rating,
+            reviews,
+            avgPrice,
             coverImage,
             logo,
             featuredImages,
@@ -806,6 +811,57 @@ exports.updateRestaurantCardProfile = async (req, res) => {
 
         // Build update object
         const updateData = {};
+
+        // Handle imageUrl, discount, rating, reviews, avgPrice (for restaurant card display)
+        if (imageUrl !== undefined) {
+            updateData['cardProfile.imageUrl'] = imageUrl ? imageUrl.trim() : '';
+        }
+
+        if (discount !== undefined) {
+            const discountNum = typeof discount === 'string' ? parseFloat(discount) : discount;
+            if (isNaN(discountNum) || discountNum < 0 || discountNum > 100) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Discount must be a number between 0 and 100'
+                });
+            }
+            updateData['cardProfile.discount'] = discountNum;
+        }
+
+        if (rating !== undefined) {
+            const ratingNum = typeof rating === 'string' ? parseFloat(rating) : rating;
+            if (isNaN(ratingNum) || ratingNum < 0 || ratingNum > 10) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Rating must be a number between 0 and 10'
+                });
+            }
+            updateData['cardProfile.rating'] = ratingNum;
+        }
+
+        if (reviews !== undefined) {
+            // Reviews can be string format like "500+" or number
+            const reviewsValue = typeof reviews === 'string' ? reviews.trim() : String(reviews);
+            // Validate format: should be number or number with +
+            if (!/^(\d+|\d+\+)$/.test(reviewsValue)) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Reviews must be a number or number with + (e.g., 120 or 500+)'
+                });
+            }
+            updateData['cardProfile.reviews'] = reviewsValue;
+        }
+
+        if (avgPrice !== undefined) {
+            const priceNum = typeof avgPrice === 'string' ? parseFloat(avgPrice) : avgPrice;
+            if (isNaN(priceNum) || priceNum < 0) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Average price must be a positive number'
+                });
+            }
+            updateData['cardProfile.avgPrice'] = priceNum;
+        }
 
         if (coverImage !== undefined) {
             updateData['cardProfile.coverImage'] = coverImage ? coverImage.trim() : '';
@@ -946,3 +1002,58 @@ exports.updateRestaurantCardProfile = async (req, res) => {
     }
 };
 
+// @desc    Upload restaurant card image and update cardProfile.imageUrl
+// @route   POST /api/restaurants/:restaurantId/card-profile/image
+// @access  Private (Owner only)
+exports.uploadRestaurantCardImage = async (req, res) => {
+    try {
+        const { restaurantId } = req.params;
+
+        // Multer should have attached file
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                message: 'Image file is required'
+            });
+        }
+
+        const restaurant = await Restaurant.findById(restaurantId);
+
+        if (!restaurant) {
+            return res.status(404).json({
+                success: false,
+                message: 'Restaurant not found'
+            });
+        }
+
+        // Only owner can upload card image
+        if (restaurant.ownerId.toString() !== req.user.id.toString()) {
+            return res.status(403).json({
+                success: false,
+                message: 'Access denied. Only the restaurant owner can upload the card image.'
+            });
+        }
+
+        // Build public URL path (served from /uploads)
+        const relativePath = `/uploads/restaurant-cards/${req.file.filename}`;
+
+        restaurant.cardProfile = restaurant.cardProfile || {};
+        restaurant.cardProfile.imageUrl = relativePath;
+        await restaurant.save();
+
+        res.status(201).json({
+            success: true,
+            message: 'Restaurant card image uploaded successfully',
+            data: {
+                imageUrl: relativePath
+            }
+        });
+    } catch (error) {
+        console.error('Upload Restaurant Card Image Error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Failed to upload restaurant card image',
+            error: error.message
+        });
+    }
+};

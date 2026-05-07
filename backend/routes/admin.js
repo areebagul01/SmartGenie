@@ -9,7 +9,8 @@ const {
     getRestaurantRequests,
     approveRestaurant,
     rejectRestaurant,
-    getRestaurantById
+    getRestaurantById,
+    deleteRestaurant
 } = require('../controllers/adminController');
 const { protect } = require('../middleware/auth');
 
@@ -31,6 +32,7 @@ router.get('/restaurant-requests', getRestaurantRequests);
 // Specific routes must come before generic :id route
 router.patch('/restaurant/approve/:id', approveRestaurant);
 router.patch('/restaurant/reject/:id', rejectRestaurant);
+router.delete('/restaurant/delete/:id', deleteRestaurant);
 router.get('/restaurant/:id', getRestaurantById);
 
 module.exports = router;

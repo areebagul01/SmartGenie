@@ -1,4 +1,6 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const {
     registerRestaurant,
     loginRestaurant,
@@ -8,7 +10,8 @@ const {
     updateRestaurantProfile,
     getAllRestaurants,
     getRestaurantCardProfile,
-    updateRestaurantCardProfile
+    updateRestaurantCardProfile,
+    uploadRestaurantCardImage
 } = require('../controllers/restaurantController');
 const {
     getMenuItems,
@@ -27,9 +30,46 @@ const {
     deleteSpecialOffer,
     toggleSpecialOfferStatus
 } = require('../controllers/menuController');
+const {
+    getRestaurantReviews,
+    createReview
+} = require('../controllers/reviewController');
 const { protect } = require('../middleware/auth');
 
+const multer = require('multer');
 const router = express.Router();
+
+// ============================================
+// Image Upload (Restaurant Card)
+// ============================================
+
+const cardImageStorage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        const uploadPath = path.join(__dirname, '..', 'uploads', 'restaurant-cards');
+        // Create directory if it doesn't exist
+        if (!fs.existsSync(uploadPath)) {
+            fs.mkdirSync(uploadPath, { recursive: true });
+        }
+        cb(null, uploadPath);
+    },
+    filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname) || '.jpg';
+        cb(null, `${req.params.restaurantId}-${Date.now()}${ext}`);
+    }
+});
+
+const cardImageFileFilter = (req, file, cb) => {
+    if (!file.mimetype.startsWith('image/')) {
+        return cb(new Error('Only image files are allowed'), false);
+    }
+    cb(null, true);
+};
+
+const uploadCardImage = multer({
+    storage: cardImageStorage,
+    fileFilter: cardImageFileFilter,
+    limits: { fileSize: 5 * 1024 * 1024 } // 5MB
+});
 
 // Debug: Log all routes
 console.log('🍽️ Restaurant routes loaded:');
@@ -75,11 +115,49 @@ router.get('/:restaurantId/menu', getMenuItems);
 // Get restaurant seat slots (public)
 router.get('/:restaurantId/seat-slots', getSeatSlots);
 
+// Get restaurant reviews (public)
+router.get('/:restaurantId/reviews', getRestaurantReviews);
+
 // Get restaurant details (public) - Must be last to avoid route conflicts
 router.get('/:restaurantId', getRestaurantDetails);
 
 // Protected routes
 router.use(protect);
+
+// Create review for restaurant (user only)
+// Wrapper to pass restaurantId from params to body
+router.post('/:restaurantId/reviews', (req, res, next) => {
+    // Set restaurantId from params to body
+    req.body.restaurantId = req.params.restaurantId;
+    next();
+}, createReview);
+
+// Upload restaurant card image (owner only)
+// Support both routes for compatibility
+const handleImageUpload = (req, res, next) => {
+    uploadCardImage.single('image')(req, res, (err) => {
+        if (err) {
+            console.error('Multer Error:', err);
+            return res.status(400).json({
+                success: false,
+                message: err.message || 'File upload failed',
+                error: err.message
+            });
+        }
+        next();
+    });
+};
+
+router.post(
+    '/:restaurantId/card-image',
+    handleImageUpload,
+    uploadRestaurantCardImage
+);
+router.post(
+    '/:restaurantId/card-profile/image',
+    handleImageUpload,
+    uploadRestaurantCardImage
+);
 
 // Get restaurant status by owner ID
 router.get('/status/:ownerId', getRestaurantStatus);

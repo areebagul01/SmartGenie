@@ -112,6 +112,28 @@ const restaurantSchema = new mongoose.Schema({
     },
     // Restaurant Card Profile
     cardProfile: {
+        imageUrl: {
+            type: String,
+            trim: true
+        },
+        discount: {
+            type: Number,
+            min: [0, 'Discount cannot be negative'],
+            max: [100, 'Discount cannot exceed 100%']
+        },
+        rating: {
+            type: Number,
+            min: [0, 'Rating cannot be negative'],
+            max: [10, 'Rating cannot exceed 10']
+        },
+        reviews: {
+            type: String,
+            trim: true
+        },
+        avgPrice: {
+            type: Number,
+            min: [0, 'Average price cannot be negative']
+        },
         coverImage: {
             type: String,
             trim: true
